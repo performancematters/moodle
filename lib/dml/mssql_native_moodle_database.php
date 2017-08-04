@@ -611,12 +611,14 @@ class mssql_native_moodle_database extends moodle_database {
             case 'BIT':
                 $type = 'L';
                 break;
+            case 'TINYINT':
             case 'INT':
             case 'SMALLINT':
             case 'INTEGER':
             case 'BIGINT':
                 $type = 'I';
                 break;
+            case 'NUMERIC':
             case 'DECIMAL':
             case 'REAL':
             case 'FLOAT':
