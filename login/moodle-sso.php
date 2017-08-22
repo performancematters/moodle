@@ -183,7 +183,6 @@ asset.user.moodle.url=/moodle/login/userOps.php?
     }
     }
 
-    update_login_count();
 	
 
 
