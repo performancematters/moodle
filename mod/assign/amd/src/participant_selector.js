@@ -107,7 +107,6 @@ define(['core/ajax', 'jquery', 'core/templates'], function(ajax, $, templates) {
                 }
 
                 success(users);
-                return;
             }).catch(failure);
         }
     };

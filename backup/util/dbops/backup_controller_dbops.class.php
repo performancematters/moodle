@@ -136,7 +136,8 @@ abstract class backup_controller_dbops extends backup_dbops {
         $xmldb_table->add_index('backupid_parentitemid_ix', XMLDB_INDEX_NOTUNIQUE, array('backupid','itemname','parentitemid'));
         $xmldb_table->add_index('backupid_itemname_newitemid_ix', XMLDB_INDEX_NOTUNIQUE, array('backupid','itemname','newitemid'));
 
-        $dbman->create_temp_table($xmldb_table); // And create it
+        //AArias: https://tracker.moodle.org/browse/MDL-34744 (restoring backups blocked some db tables)
+        $dbman->create_table($xmldb_table); // And create it
 
     }
 
@@ -158,7 +159,8 @@ abstract class backup_controller_dbops extends backup_dbops {
         $xmldb_table->add_key('primary', XMLDB_KEY_PRIMARY, array('id'));
         $xmldb_table->add_index('backupid_contextid_component_filearea_itemid_ix', XMLDB_INDEX_NOTUNIQUE, array('backupid','contextid','component','filearea','itemid'));
 
-        $dbman->create_temp_table($xmldb_table); // And create it
+        //AArias: https://tracker.moodle.org/browse/MDL-34744 (restoring backups blocked some db tables)
+        $dbman->create_table($xmldb_table); // And create it
     }
 
     public static function drop_backup_ids_temp_table($backupid) {

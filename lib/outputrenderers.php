@@ -89,7 +89,7 @@ class renderer_base {
             $loader = new \core\output\mustache_filesystem_loader();
             $stringhelper = new \core\output\mustache_string_helper();
             $quotehelper = new \core\output\mustache_quote_helper();
-            $jshelper = new \core\output\mustache_javascript_helper($this->page);
+            $jshelper = new \core\output\mustache_javascript_helper($this->page->requires);
             $pixhelper = new \core\output\mustache_pix_helper($this);
             $shortentexthelper = new \core\output\mustache_shorten_text_helper();
             $userdatehelper = new \core\output\mustache_user_date_helper();
@@ -650,16 +650,6 @@ class core_renderer extends renderer_base {
                     'type' => $type, 'title' => $alt->title, 'href' => $alt->url));
         }
 
-        // Add noindex tag if relevant page and setting applied.
-        $allowindexing = isset($CFG->allowindexing) ? $CFG->allowindexing : 0;
-        $loginpages = array('login-index', 'login-signup');
-        if ($allowindexing == 2 || ($allowindexing == 0 && in_array($this->page->pagetype, $loginpages))) {
-            if (!isset($CFG->additionalhtmlhead)) {
-                $CFG->additionalhtmlhead = '';
-            }
-            $CFG->additionalhtmlhead .= '<meta name="robots" content="noindex" />';
-        }
-
         if (!empty($CFG->additionalhtmlhead)) {
             $output .= "\n".$CFG->additionalhtmlhead;
         }
@@ -741,26 +731,16 @@ class core_renderer extends renderer_base {
     public function standard_footer_html() {
         global $CFG, $SCRIPT;
 
-        $output = '';
         if (during_initial_install()) {
             // Debugging info can not work before install is finished,
             // in any case we do not want any links during installation!
-            return $output;
-        }
-
-        // Give plugins an opportunity to add any footer elements.
-        // The callback must always return a string containing valid html footer content.
-        $pluginswithfunction = get_plugins_with_function('standard_footer_html', 'lib.php');
-        foreach ($pluginswithfunction as $plugins) {
-            foreach ($plugins as $function) {
-                $output .= $function();
-            }
+            return '';
         }
 
         // This function is normally called from a layout.php file in {@link core_renderer::header()}
         // but some of the content won't be known until later, so we return a placeholder
         // for now. This will be replaced with the real content in {@link core_renderer::footer()}.
-        $output .= $this->unique_performance_info_token;
+        $output = $this->unique_performance_info_token;
         if ($this->page->devicetypeinuse == 'legacy') {
             // The legacy theme is in use print the notification
             $output .= html_writer::tag('div', get_string('legacythemeinuse'), array('class'=>'legacythemeinuse'));
@@ -794,6 +774,21 @@ class core_renderer extends renderer_base {
               <li><a href="http://www.contentquality.com/mynewtester/cynthia.exe?rptmode=0&amp;warnp2n3e=1&amp;url1=' . urlencode(qualified_me()) . '">WCAG 1 (2,3) Check</a></li>
             </ul></div>';
         }
+        //PM: adding helpful information in the footer (node name, branch, build number and commit hash from the mercurial repo)
+        //the new CFG settings are defined in the file config.php.  If they don't exist then they are ignored, and the minimum information
+        //to be displayed is the name of the node 
+        $tnl_footer_info = '<span style="font-size:65%;">' . gethostname();
+        if(isset($CFG->codebranch)){
+            $tnl_footer_info .= ' | ' . $CFG->codebranch;
+        }
+        if(isset($CFG->jenkinsbuild)){
+            $tnl_footer_info .= ' | ' . $CFG->jenkinsbuild;
+        }
+        if(isset($CFG->hgcommithash)){
+            $tnl_footer_info .= ' | ' . $CFG->hgcommithash;
+        }
+        $tnl_footer_info .= '</span>';
+        $output .= $tnl_footer_info;
         return $output;
     }
 
@@ -811,85 +806,6 @@ class core_renderer extends renderer_base {
         // DO NOT add classes.
         // DO NOT add an id.
         return '<div role="main">'.$this->unique_main_content_token.'</div>';
-    }
-
-    /**
-     * Returns standard navigation between activities in a course.
-     *
-     * @return string the navigation HTML.
-     */
-    public function activity_navigation() {
-        // First we should check if we want to add navigation.
-        $context = $this->page->context;
-        if (($this->page->pagelayout !== 'incourse' && $this->page->pagelayout !== 'frametop')
-            || $context->contextlevel != CONTEXT_MODULE) {
-            return '';
-        }
-
-        // If the activity is in stealth mode, show no links.
-        if ($this->page->cm->is_stealth()) {
-            return '';
-        }
-
-        // Get a list of all the activities in the course.
-        $course = $this->page->cm->get_course();
-        $modules = get_fast_modinfo($course->id)->get_cms();
-
-        // Put the modules into an array in order by the position they are shown in the course.
-        $mods = [];
-        $activitylist = [];
-        foreach ($modules as $module) {
-            // Only add activities the user can access, aren't in stealth mode and have a url (eg. mod_label does not).
-            if (!$module->uservisible || $module->is_stealth() || empty($module->url)) {
-                continue;
-            }
-            $mods[$module->id] = $module;
-
-            // No need to add the current module to the list for the activity dropdown menu.
-            if ($module->id == $this->page->cm->id) {
-                continue;
-            }
-            // Module name.
-            $modname = $module->get_formatted_name();
-            // Display the hidden text if necessary.
-            if (!$module->visible) {
-                $modname .= ' ' . get_string('hiddenwithbrackets');
-            }
-            // Module URL.
-            $linkurl = new moodle_url($module->url, array('forceview' => 1));
-            // Add module URL (as key) and name (as value) to the activity list array.
-            $activitylist[$linkurl->out(false)] = $modname;
-        }
-
-        $nummods = count($mods);
-
-        // If there is only one mod then do nothing.
-        if ($nummods == 1) {
-            return '';
-        }
-
-        // Get an array of just the course module ids used to get the cmid value based on their position in the course.
-        $modids = array_keys($mods);
-
-        // Get the position in the array of the course module we are viewing.
-        $position = array_search($this->page->cm->id, $modids);
-
-        $prevmod = null;
-        $nextmod = null;
-
-        // Check if we have a previous mod to show.
-        if ($position > 0) {
-            $prevmod = $mods[$modids[$position - 1]];
-        }
-
-        // Check if we have a next mod to show.
-        if ($position < ($nummods - 1)) {
-            $nextmod = $mods[$modids[$position + 1]];
-        }
-
-        $activitynav = new \core_course\output\activity_navigation($prevmod, $nextmod, $activitylist);
-        $renderer = $this->page->get_renderer('core', 'course');
-        return $renderer->render($activitynav);
     }
 
     /**
@@ -2447,7 +2363,6 @@ class core_renderer extends renderer_base {
      *     - alttext=true (add image alt attribute)
      *     - class = image class attribute (default 'userpicture')
      *     - visibletoscreenreaders=true (whether to be visible to screen readers)
-     *     - includefullname=false (whether to include the user's full name together with the user picture)
      * @return string HTML fragment
      */
     public function user_picture(stdClass $user, array $options = null) {
@@ -2504,11 +2419,6 @@ class core_renderer extends renderer_base {
 
         // get the image html output fisrt
         $output = html_writer::empty_tag('img', $attributes);
-
-        // Show fullname together with the picture when desired.
-        if ($userpicture->includefullname) {
-            $output .= fullname($userpicture->user);
-        }
 
         // then wrap it in link if needed
         if (!$userpicture->link) {
@@ -3255,7 +3165,7 @@ EOD;
             array('role' => 'button', 'tabindex' => 0));
         $formattrs = array('class' => 'search-input-form', 'action' => $CFG->wwwroot . '/search/index.php');
         $inputattrs = array('type' => 'text', 'name' => 'q', 'placeholder' => get_string('search', 'search'),
-            'size' => 13, 'tabindex' => -1, 'id' => 'id_q_' . $id, 'class' => 'form-control');
+            'size' => 13, 'tabindex' => -1, 'id' => 'id_q_' . $id);
 
         $contents = html_writer::tag('label', get_string('enteryoursearchquery', 'search'),
             array('for' => 'id_q_' . $id, 'class' => 'accesshide')) . html_writer::tag('input', '', $inputattrs);
@@ -4160,16 +4070,16 @@ EOD;
 
     public function context_header($headerinfo = null, $headinglevel = 1) {
         global $DB, $USER, $CFG;
-        require_once($CFG->dirroot . '/user/lib.php');
         $context = $this->page->context;
-        $heading = null;
-        $imagedata = null;
-        $subheader = null;
-        $userbuttons = null;
         // Make sure to use the heading if it has been set.
         if (isset($headerinfo['heading'])) {
             $heading = $headerinfo['heading'];
+        } else {
+            $heading = null;
         }
+        $imagedata = null;
+        $subheader = null;
+        $userbuttons = null;
         // The user context currently has images and buttons. Other contexts may follow.
         if (isset($headerinfo['user']) || $context->contextlevel == CONTEXT_USER) {
             if (isset($headerinfo['user'])) {
@@ -4178,60 +4088,47 @@ EOD;
                 // Look up the user information if it is not supplied.
                 $user = $DB->get_record('user', array('id' => $context->instanceid));
             }
-
             // If the user context is set, then use that for capability checks.
             if (isset($headerinfo['usercontext'])) {
                 $context = $headerinfo['usercontext'];
             }
-
-            // Only provide user information if the user is the current user, or a user which the current user can view.
-            $canviewdetails = false;
-            if ($user->id == $USER->id || user_can_view_profile($user)) {
-                $canviewdetails = true;
+            // Use the user's full name if the heading isn't set.
+            if (!isset($heading)) {
+                $heading = fullname($user);
             }
 
-            if ($canviewdetails) {
-                // Use the user's full name if the heading isn't set.
-                if (!isset($heading)) {
-                    $heading = fullname($user);
-                }
-
-                $imagedata = $this->user_picture($user, array('size' => 100));
-
-                // Check to see if we should be displaying a message button.
-                if (!empty($CFG->messaging) && $USER->id != $user->id && has_capability('moodle/site:sendmessage', $context)) {
-                    $iscontact = !empty(message_get_contact($user->id));
-                    $contacttitle = $iscontact ? 'removefromyourcontacts' : 'addtoyourcontacts';
-                    $contacturlaction = $iscontact ? 'removecontact' : 'addcontact';
-                    $contactimage = $iscontact ? 'removecontact' : 'addcontact';
-                    $userbuttons = array(
-                        'messages' => array(
-                            'buttontype' => 'message',
-                            'title' => get_string('message', 'message'),
-                            'url' => new moodle_url('/message/index.php', array('id' => $user->id)),
-                            'image' => 'message',
-                            'linkattributes' => array('role' => 'button'),
-                            'page' => $this->page
+            $imagedata = $this->user_picture($user, array('size' => 100));
+            // Check to see if we should be displaying a message button.
+            if (!empty($CFG->messaging) && $USER->id != $user->id && has_capability('moodle/site:sendmessage', $context)) {
+                $iscontact = !empty(message_get_contact($user->id));
+                $contacttitle = $iscontact ? 'removefromyourcontacts' : 'addtoyourcontacts';
+                $contacturlaction = $iscontact ? 'removecontact' : 'addcontact';
+                $contactimage = $iscontact ? 'removecontact' : 'addcontact';
+                $userbuttons = array(
+                    'messages' => array(
+                        'buttontype' => 'message',
+                        'title' => get_string('message', 'message'),
+                        'url' => new moodle_url('/message/index.php', array('id' => $user->id)),
+                        'image' => 'message',
+                        'linkattributes' => array('role' => 'button'),
+                        'page' => $this->page
+                    ),
+                    'togglecontact' => array(
+                        'buttontype' => 'togglecontact',
+                        'title' => get_string($contacttitle, 'message'),
+                        'url' => new moodle_url('/message/index.php', array(
+                                'user1' => $USER->id,
+                                'user2' => $user->id,
+                                $contacturlaction => $user->id,
+                                'sesskey' => sesskey())
                         ),
-                        'togglecontact' => array(
-                            'buttontype' => 'togglecontact',
-                            'title' => get_string($contacttitle, 'message'),
-                            'url' => new moodle_url('/message/index.php', array(
-                                    'user1' => $USER->id,
-                                    'user2' => $user->id,
-                                    $contacturlaction => $user->id,
-                                    'sesskey' => sesskey())
-                            ),
-                            'image' => $contactimage,
-                            'linkattributes' => \core_message\helper::togglecontact_link_params($user, $iscontact),
-                            'page' => $this->page
-                        ),
-                    );
+                        'image' => $contactimage,
+                        'linkattributes' => \core_message\helper::togglecontact_link_params($user, $iscontact),
+                        'page' => $this->page
+                    ),
+                );
 
-                    $this->page->requires->string_for_js('changesmadereallygoaway', 'moodle');
-                }
-            } else {
-                $heading = null;
+                $this->page->requires->string_for_js('changesmadereallygoaway', 'moodle');
             }
         }
 
@@ -4412,7 +4309,7 @@ EOD;
         $context->cookieshelpiconformatted = $this->help_icon('cookiesenabled');
         $context->errorformatted = $this->error_text($context->error);
 
-        return $this->render_from_template('core/loginform', $context);
+        return $this->render_from_template('core/login', $context);
     }
 
     /**

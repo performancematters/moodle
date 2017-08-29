@@ -1,0 +1,33 @@
+@import url(https://fonts.googleapis.com/css?family=Source+Sans+Pro:400,200,300,300italic,400italic,600,600italic,700,700italic);
+
+
+/* Custom CSS
+-------------------------*/
+div.logo {
+    background: url([[setting:logo]]) no-repeat 0 0;
+    display: block;
+    float: left;
+    height: 75px;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+}
+
+.dir-rtl div.logo {
+    background: url([[setting:logo]]) no-repeat 100% 0;
+    display: block;
+    float: right;
+}
+
+
+/* Custom CSS Settings
+-------------------------*/
+[[setting:customcss]]
+
+/* Color and layout changes can be found in bootstrapbase less files */
+
+/* Added footernav.less to provide support for activity links within courses */
+
+
+
+
